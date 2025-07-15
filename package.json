@@ -1,7 +1,7 @@
 {
   "name": "raversus-iridology-api",
   "version": "1.0.0",
-  "description": "Backend API for RAVERSUS Iridology",
+  "description": "Backend + Frontend for RAVERSUS Iridology",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
