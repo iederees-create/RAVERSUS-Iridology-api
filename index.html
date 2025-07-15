@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RAVERSUS Iridology</title>
+  <style>
+    :root {
+      --primary: #0A2E5D;
+      --accent: #C4A942;
+      --bg-light: #f5f7fa;
+      --bg-dark: #121212;
+      --text-light: #ffffff;
+      --text-dark: #333333;
+    }
+
+    body.dark {
+      background-color: var(--bg-dark);
+      color: var(--text-light);
+    }
+
+    body.light {
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    .container {
+      max-width: 400px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+
+    .capture-area {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border: 4px dashed var(--accent);
+      margin: 20px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(255,255,255,0.1);
+      overflow: hidden;
+    }
+
+    #videoElement {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    #canvasElement {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+
+    .eye-circle {
+      width: 80%;
+      height: 80%;
+      border: 2px solid white;
+      border-radius: 50%;
+      position: relative;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .capture-button {
+      display: block;
+      margin: 0 auto;
+      padding: 12px 24px;
+      background-color: var(--accent);
+      color: black;
+      border: none;
+      border-radius: 25px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .result-section {
+      margin-top: 20px;
+      background: rgba(255,255,255,0.05);
+      padding: 15px;
+      border-radius: 10px;
+      display: none;
+    }
+
+    .toggle-mode {
+      display: block;
+      margin: 10px auto;
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .report-item {
+      margin: 10px 0;
+    }
+
+    .iris-image {
+      width: 100%;
+      border-radius: 10px;
+      margin: 10px 0;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: var(--accent);
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-message {
+      color: #ff6b6b;
+      text-align: center;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body class="light">
+  <div class="container">
+    <h1>RAVERSUS</h1>
+    <button class="toggle-mode" onclick="toggleMode()">Toggle Dark/Light Mode</button>
+
+    <div class="capture-area" id="captureArea">
+      <video id="videoElement" autoplay playsinline></video>
+      <canvas id="canvasElement"></canvas>
+      <div class="eye-circle"></div>
+      <div id="instructions">Please allow camera access to begin</div>
+    </div>
+
+    <button class="capture-button" id="captureButton" disabled>Start Camera</button>
+
+    <div class="result-section" id="resultSection">
+      <h2 id="analysisStatus">Analyzing...</h2>
+      <img id="irisPreview" src="" alt="Captured Iris" class="iris-image"/>
+      <div id="analysisResults"></div>
+    </div>
+  </div>
+
+  <!-- Load TensorFlow.js and MobileNet model -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+  <script>
+    // DOM Elements
+    const videoElement = document.getElementById('videoElement');
+    const canvasElement = document.getElementById('canvasElement');
+    const captureButton = document.getElementById('captureButton');
+    const captureArea = document.getElementById('captureArea');
+    const resultSection = document.getElementById('resultSection');
+    const irisPreview = document.getElementById('irisPreview');
+    const analysisResults = document.getElementById('analysisResults');
+    const analysisStatus = document.getElementById('analysisStatus');
+    const instructions = document.getElementById('instructions');
+
+    // App State
+    let isCameraOn = false;
+    let model;
+    let capturedImage = null;
+
+    // Initialize the app
+    document.addEventListener('DOMContentLoaded', () => {
+      captureButton.addEventListener('click', handleCaptureButtonClick);
+      loadModel();
+    });
+
+    // Toggle dark/light mode
+    function toggleMode() {
+      document.body.classList.toggle('dark');
+      document.body.classList.toggle('light');
+    }
+
+    // Handle the capture button click
+    async function handleCaptureButtonClick() {
+      if (!isCameraOn) {
+        await startCamera();
+        captureButton.textContent = "Capture Iris";
+        isCameraOn = true;
+      } else if (!capturedImage) {
+        capturedImage = captureIris();
+        captureButton.textContent = "Retake";
+        analyzeIris(capturedImage);
+      } else {
+        // Retake photo
+        capturedImage = null;
+        videoElement.style.display = 'block';
+        canvasElement.style.display = 'none';
+        resultSection.style.display = 'none';
+        captureButton.textContent = "Capture Iris";
+      }
+    }
+
+    // Start the camera
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1080 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+        videoElement.srcObject = stream;
+        videoElement.style.display = 'block';
+        instructions.style.display = 'none';
+        captureButton.disabled = false;
+      } catch (err) {
+        console.error("Camera error: ", err);
+        instructions.textContent = "Camera access denied. Please enable camera permissions.";
+      }
+    }
+
+    // Capture the iris image
+    function captureIris() {
+      const context = canvasElement.getContext('2d');
+      const size = Math.min(videoElement.videoWidth, videoElement.videoHeight);
+      const x = (videoElement.videoWidth - size) / 2;
+      const y = (videoElement.videoHeight - size) / 2;
+      
+      canvasElement.width = size;
+      canvasElement.height = size;
+      context.drawImage(videoElement, x, y, size, size, 0, 0, size, size);
+      
+      videoElement.style.display = 'none';
+      canvasElement.style.display = 'block';
+      
+      // Convert to circular mask
+      context.globalCompositeOperation = 'destination-in';
+      context.beginPath();
+      context.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+      context.fill();
+      
+      return canvasElement.toDataURL('image/jpeg');
+    }
+
+    // Load the TensorFlow.js model
+    async function loadModel() {
+      try {
+        analysisStatus.innerHTML = "Loading AI model... <span class='loading'></span>";
+        // In a real app, you would load your custom trained iridology model here
+        // For demo purposes, we'll use MobileNet as a placeholder
+        model = await tf.loadGraphModel('https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v3_small_100_224/classification/5/default/1', {fromTFHub: true});
+        console.log("Model loaded successfully");
+      } catch (err) {
+        console.error("Model loading error: ", err);
+        analysisStatus.textContent = "Failed to load AI model";
+      }
+    }
+
+    // Analyze the iris image
+    async function analyzeIris(imageData) {
+      resultSection.style.display = 'block';
+      irisPreview.src = imageData;
+      analysisStatus.innerHTML = "Analyzing iris... <span class='loading'></span>";
+      analysisResults.innerHTML = '';
+
+      try {
+        // In a production app, you would:
+        // 1. Send the image to your backend API for analysis
+        // 2. Or use a locally loaded TensorFlow.js model
+        
+        // For demo purposes, we'll simulate analysis with some sample results
+        setTimeout(() => {
+          displayAnalysisResults(generateSampleResults());
+        }, 2000);
+
+        // Real implementation would look more like this:
+        /*
+        const imgElement = document.createElement('img');
+        imgElement.src = imageData;
+        await new Promise((resolve) => { imgElement.onload = resolve; });
+        
+        const tensor = tf.browser.fromPixels(imgElement)
+          .resizeNearestNeighbor([224, 224])
+          .toFloat()
+          .expandDims();
+        
+        const predictions = await model.predict(tensor).data();
+        const results = interpretPredictions(predictions);
+        displayAnalysisResults(results);
+        */
+      } catch (err) {
+        console.error("Analysis error: ", err);
+        analysisStatus.textContent = "Analysis failed";
+        analysisResults.innerHTML = `<div class="error-message">Error analyzing iris. Please try again.</div>`;
+      }
+    }
+
+    // Display the analysis results
+    function displayAnalysisResults(results) {
+      analysisStatus.textContent = "Analysis Complete";
+      
+      let html = `
+        <div class="report-item"><strong>Dominant Iris Pattern:</strong> ${results.pattern}</div>
+        <div class="report-item"><strong>Potential Insight:</strong> ${results.insight}</div>
+        <div class="report-item"><strong>Confidence:</strong> ${results.confidence}%</div>
+        <div class="report-item"><strong>Dietary Tip:</strong> ${results.dietaryTip}</div>
+        <div class="report-item"><strong>Lifestyle:</strong> ${results.lifestyle}</div>
+      `;
+      
+      analysisResults.innerHTML = html;
+    }
+
+    // Generate sample results for demo purposes
+    function generateSampleResults() {
+      const patterns = [
+        "Lacuna (Crypts)",
+        "Pigmentation Spots",
+        "Radial Furrows",
+        "Contraction Rings",
+        "Nerve Rings"
+      ];
+      
+      const insights = [
+        "Possible digestive sensitivity",
+        "Potential liver stress",
+        "Adrenal fatigue indicators",
+        "Lymphatic system congestion",
+        "Circulatory system considerations"
+      ];
+      
+      const tips = [
+        "Increase fiber intake and stay hydrated",
+        "Reduce dairy intake and increase probiotics",
+        "Incorporate more leafy greens and omega-3s",
+        "Practice deep breathing exercises",
+        "Consider gentle detoxification support"
+      ];
+      
+      const lifestyles = [
+        "Incorporate stress-reducing practices like yoga",
+        "Ensure adequate sleep and rest",
+        "Regular moderate exercise recommended",
+        "Consider meditation for relaxation",
+        "Maintain consistent daily routines"
+      ];
+      
+      const randomIndex = Math.floor(Math.random() * patterns.length);
+      
+      return {
+        pattern: patterns[randomIndex],
+        insight: insights[randomIndex],
+        confidence: Math.floor(Math.random() * 30) + 70, // 70-99%
+        dietaryTip: tips[randomIndex],
+        lifestyle: lifestyles[randomIndex]
+      };
+    }
+
+    // In a real implementation, you would have:
+    // - A proper trained model for iridology
+    // - API integration with your backend
+    // - More sophisticated image processing
+    // - User accounts to save history
+    // - More detailed analysis reports
+  </script>
+</body>
+</html>
