@@ -1,7 +1,7 @@
 {
-  "name": "raversus-iridology-api",
+  "name": "raversus-iridology",
   "version": "1.0.0",
-  "description": "Backend + Frontend for RAVERSUS Iridology",
+  "description": "Fullstack iris analyzer with HTML frontend and Express backend",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
