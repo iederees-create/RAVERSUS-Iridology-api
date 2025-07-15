@@ -14,19 +14,10 @@
       --text-dark: #333333;
     }
 
-    body.dark {
-      background-color: var(--bg-dark);
-      color: var(--text-light);
-    }
-
-    body.light {
-      background-color: var(--bg-light);
-      color: var(--text-dark);
-    }
-
+    body.dark { background-color: var(--bg-dark); color: var(--text-light); }
+    body.light { background-color: var(--bg-light); color: var(--text-dark); }
     body {
-      margin: 0;
-      font-family: 'Segoe UI', sans-serif;
+      margin: 0; font-family: 'Segoe UI', sans-serif;
       transition: background-color 0.3s, color 0.3s;
     }
 
@@ -55,7 +46,7 @@
       overflow: hidden;
     }
 
-    #videoElement {
+    #videoElement, #canvasElement {
       position: absolute;
       width: 100%;
       height: 100%;
@@ -63,16 +54,8 @@
       display: none;
     }
 
-    #canvasElement {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      display: none;
-    }
-
     .eye-circle {
-      width: 80%;
-      height: 80%;
+      width: 80%; height: 80%;
       border: 2px solid white;
       border-radius: 50%;
       position: relative;
@@ -112,16 +95,6 @@
       cursor: pointer;
     }
 
-    .report-item {
-      margin: 10px 0;
-    }
-
-    .iris-image {
-      width: 100%;
-      border-radius: 10px;
-      margin: 10px 0;
-    }
-
     .loading {
       display: inline-block;
       width: 20px;
@@ -132,20 +105,10 @@
       animation: spin 1s ease-in-out infinite;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    .error-message {
-      color: #ff6b6b;
-      text-align: center;
+    .report-item {
       margin: 10px 0;
-    }
-
-    #instructions {
-      text-align: center;
-      padding: 20px;
-      z-index: 1;
     }
 
     .eye-color-sample {
@@ -180,41 +143,30 @@
     </div>
   </div>
 
-  <!-- Load TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
   <script>
-    // DOM Elements
     const videoElement = document.getElementById('videoElement');
     const canvasElement = document.getElementById('canvasElement');
     const captureButton = document.getElementById('captureButton');
-    const captureArea = document.getElementById('captureArea');
     const resultSection = document.getElementById('resultSection');
     const irisPreview = document.getElementById('irisPreview');
     const analysisResults = document.getElementById('analysisResults');
     const analysisStatus = document.getElementById('analysisStatus');
     const instructions = document.getElementById('instructions');
 
-    // App State
     let isCameraOn = false;
     let stream = null;
     let capturedImage = null;
-
-    // Backend API Configuration
-    const API_BASE_URL = 'https://your-render-app-name.onrender.com'; // Replace with your Render.com URL
     const API_ENDPOINT = '/api/analyze';
 
-    // Initialize the app
     document.addEventListener('DOMContentLoaded', () => {
       captureButton.addEventListener('click', handleCaptureButtonClick);
     });
 
-    // Toggle dark/light mode
     function toggleMode() {
       document.body.classList.toggle('dark');
       document.body.classList.toggle('light');
     }
 
-    // Handle the capture button click
     async function handleCaptureButtonClick() {
       if (!isCameraOn) {
         await startCamera();
@@ -225,7 +177,6 @@
         captureButton.textContent = "Retake";
         analyzeIris(capturedImage);
       } else {
-        // Retake photo
         capturedImage = null;
         videoElement.style.display = 'block';
         canvasElement.style.display = 'none';
@@ -234,55 +185,42 @@
       }
     }
 
-    // Start the camera
     async function startCamera() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'user',
-            width: { ideal: 1080 },
-            height: { ideal: 1080 }
-          },
-          audio: false
-        });
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
         videoElement.srcObject = stream;
         videoElement.style.display = 'block';
         instructions.style.display = 'none';
       } catch (err) {
         console.error("Camera error: ", err);
-        instructions.textContent = "Camera access denied. Please enable camera permissions.";
+        instructions.textContent = "Camera access denied.";
       }
     }
 
-    // Capture the iris image
     async function captureIris() {
       return new Promise((resolve) => {
         const context = canvasElement.getContext('2d');
         const size = Math.min(videoElement.videoWidth, videoElement.videoHeight);
         const x = (videoElement.videoWidth - size) / 2;
         const y = (videoElement.videoHeight - size) / 2;
-        
+
         canvasElement.width = size;
         canvasElement.height = size;
         context.drawImage(videoElement, x, y, size, size, 0, 0, size, size);
-        
-        // Apply circular mask
         context.globalCompositeOperation = 'destination-in';
         context.beginPath();
         context.arc(size/2, size/2, size/2, 0, Math.PI * 2);
         context.fill();
         context.globalCompositeOperation = 'source-over';
-        
+
         videoElement.style.display = 'none';
         canvasElement.style.display = 'block';
-        
-        // Get image data for analysis
+
         const imageData = canvasElement.toDataURL('image/jpeg');
         resolve(imageData);
       });
     }
 
-    // Analyze the iris image
     async function analyzeIris(imageData) {
       resultSection.style.display = 'block';
       irisPreview.src = imageData;
@@ -290,245 +228,37 @@
       analysisResults.innerHTML = '';
 
       try {
-        // First get local analysis (eye color)
-        const img = new Image();
-        img.src = imageData;
-        
-        await new Promise((resolve) => {
-          img.onload = resolve;
-        });
-        
-        const eyeColor = await getDominantEyeColor(img);
-        
-        // Send to backend for full analysis
         const formData = new FormData();
         const blob = await fetch(imageData).then(r => r.blob());
         formData.append('image', blob, 'iris.jpg');
-        
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINT}`, {
+
+        const response = await fetch(API_ENDPOINT, {
           method: 'POST',
           body: formData
         });
-        
+
         if (!response.ok) {
-          throw new Error('Analysis failed');
+          throw new Error('API error');
         }
-        
-        const analysisData = await response.json();
-        
-        // Display results
-        displayAnalysisResults({
-          ...analysisData,
-          eyeColor: eyeColor
-        });
-        
+
+        const data = await response.json();
+
+        analysisStatus.textContent = "Analysis Complete";
+        analysisResults.innerHTML = `
+          <div class="report-item"><strong>Pattern:</strong> ${data.pattern}</div>
+          <div class="report-item"><strong>Insight:</strong> ${data.insight}</div>
+          <div class="report-item"><strong>Confidence:</strong> ${data.confidence}%</div>
+          <div class="report-item"><strong>Dietary Tip:</strong> ${data.dietaryTip}</div>
+          <div class="report-item"><strong>Lifestyle:</strong> ${data.lifestyle}</div>
+          <div class="report-item"><strong>Additional Insights:</strong> ${data.additionalInsights}</div>
+          <div class="report-item"><strong>Recommendations:</strong> ${data.recommendations}</div>
+        `;
       } catch (err) {
-        console.error("Analysis error: ", err);
-        
-        // Fallback to local analysis if API fails
-        displayAnalysisResults(generateLocalAnalysis(eyeColor));
-        
-        analysisStatus.textContent = "Analysis complete (offline mode)";
+        console.error(err);
+        analysisStatus.textContent = "Analysis failed. Please try again.";
       }
     }
 
-    // Get dominant eye color from the image
-    async function getDominantEyeColor(img) {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const size = Math.min(img.width, img.height);
-      
-      canvas.width = size;
-      canvas.height = size;
-      
-      // Draw the circular iris image
-      ctx.drawImage(img, 0, 0, size, size);
-      
-      // Get image data from the center region (avoiding pupil and sclera)
-      const centerX = size / 2;
-      const centerY = size / 2;
-      const radius = size * 0.3; // Analyze middle ring of iris
-      
-      const samplePoints = 100;
-      let colorCounts = {};
-      
-      for (let i = 0; i < samplePoints; i++) {
-        const angle = (i / samplePoints) * Math.PI * 2;
-        const x = centerX + Math.cos(angle) * radius;
-        const y = centerY + Math.sin(angle) * radius;
-        
-        const pixel = ctx.getImageData(x, y, 1, 1).data;
-        const color = rgbToColorName(pixel[0], pixel[1], pixel[2]);
-        
-        colorCounts[color] = (colorCounts[color] || 0) + 1;
-      }
-      
-      // Find the most frequent color
-      let dominantColor = 'Unknown';
-      let maxCount = 0;
-      
-      for (const [color, count] of Object.entries(colorCounts)) {
-        if (count > maxCount) {
-          maxCount = count;
-          dominantColor = color;
-        }
-      }
-      
-      return {
-        name: dominantColor,
-        rgb: getColorRGB(dominantColor)
-      };
-    }
-
-    // Convert RGB values to color name
-    function rgbToColorName(r, g, b) {
-      // Simple color classification - could be enhanced
-      const hue = getHue(r, g, b);
-      const saturation = getSaturation(r, g, b);
-      const lightness = getLightness(r, g, b);
-      
-      if (lightness < 30) return 'Black';
-      if (lightness > 85) return 'White';
-      if (saturation < 25) return 'Gray';
-      
-      if (hue >= 0 && hue < 30) return 'Brown';
-      if (hue >= 30 && hue < 90) return 'Amber';
-      if (hue >= 90 && hue < 150) return 'Green';
-      if (hue >= 150 && hue < 210) return 'Blue';
-      if (hue >= 210 && hue < 270) return 'Violet';
-      if (hue >= 270 && hue < 330) return 'Hazel';
-      return 'Brown';
-    }
-
-    // Helper functions for color analysis
-    function getHue(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h = 0;
-      
-      if (max === min) {
-        h = 0;
-      } else {
-        const d = max - min;
-        switch (max) {
-          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-          case g: h = (b - r) / d + 2; break;
-          case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-      }
-      
-      return Math.round(h * 360);
-    }
-
-    function getSaturation(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      const l = (max + min) / 2;
-      let s = 0;
-      
-      if (max !== min) {
-        s = l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
-      }
-      
-      return Math.round(s * 100);
-    }
-
-    function getLightness(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      return Math.round(((max + min) / 2) * 100);
-    }
-
-    function getColorRGB(colorName) {
-      const colors = {
-        'Brown': '#964B00',
-        'Blue': '#0000FF',
-        'Green': '#00FF00',
-        'Hazel': '#C8B575',
-        'Amber': '#FFBF00',
-        'Gray': '#808080',
-        'Violet': '#8F00FF',
-        'Black': '#000000',
-        'White': '#FFFFFF'
-      };
-      return colors[colorName] || '#000000';
-    }
-
-    // Generate local analysis when API is unavailable
-    function generateLocalAnalysis(eyeColor) {
-      const patterns = [
-        "Lacuna (Crypts)",
-        "Pigmentation Spots",
-        "Radial Furrows",
-        "Contraction Rings",
-        "Nerve Rings"
-      ];
-      
-      const insights = [
-        "Possible digestive sensitivity",
-        "Potential liver stress",
-        "Adrenal fatigue indicators",
-        "Lymphatic system congestion",
-        "Circulatory system considerations"
-      ];
-      
-      const tips = [
-        "Increase fiber intake and stay hydrated",
-        "Reduce dairy intake and increase probiotics",
-        "Incorporate more leafy greens and omega-3s",
-        "Practice deep breathing exercises",
-        "Consider gentle detoxification support"
-      ];
-      
-      const lifestyles = [
-        "Incorporate stress-reducing practices like yoga",
-        "Ensure adequate sleep and rest",
-        "Regular moderate exercise recommended",
-        "Consider meditation for relaxation",
-        "Maintain consistent daily routines"
-      ];
-      
-      const randomIndex = Math.floor(Math.random() * patterns.length);
-      
-      return {
-        eyeColor: eyeColor,
-        pattern: patterns[randomIndex],
-        insight: insights[randomIndex],
-        confidence: Math.floor(Math.random() * 30) + 70, // 70-99%
-        dietaryTip: tips[randomIndex],
-        lifestyle: lifestyles[randomIndex]
-      };
-    }
-
-    // Display the analysis results
-    function displayAnalysisResults(results) {
-      analysisStatus.textContent = "Analysis Complete";
-      
-      let html = `
-        <div class="report-item"><strong>Eye Color:</strong> ${results.eyeColor.name} 
-          <span class="eye-color-sample" style="background-color: ${results.eyeColor.rgb}"></span>
-        </div>
-        <div class="report-item"><strong>Dominant Iris Pattern:</strong> ${results.pattern}</div>
-        <div class="report-item"><strong>Potential Insight:</strong> ${results.insight}</div>
-        <div class="report-item"><strong>Confidence:</strong> ${results.confidence}%</div>
-        <div class="report-item"><strong>Dietary Tip:</strong> ${results.dietaryTip}</div>
-        <div class="report-item"><strong>Lifestyle:</strong> ${results.lifestyle}</div>
-      `;
-      
-      // Add additional details if available from API
-      if (results.additionalInsights) {
-        html += `<div class="report-item"><strong>Additional Insights:</strong> ${results.additionalInsights}</div>`;
-      }
-      
-      if (results.recommendations) {
-        html += `<div class="report-item"><strong>Recommendations:</strong> ${results.recommendations}</div>`;
-      }
-      
-      analysisResults.innerHTML = html;
-    }
-
-    // Clean up camera stream when leaving page
     window.addEventListener('beforeunload', () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
