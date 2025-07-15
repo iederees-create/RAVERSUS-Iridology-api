@@ -42,45 +42,6 @@
       margin-bottom: 10px;
     }
 
-    .auth-section {
-      margin-bottom: 20px;
-      text-align: center;
-    }
-
-    .auth-form {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-
-    .auth-form input {
-      padding: 10px;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-    }
-
-    .auth-form button {
-      padding: 10px;
-      background-color: var(--accent);
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    .auth-toggle {
-      background: none;
-      border: none;
-      color: var(--accent);
-      text-decoration: underline;
-      cursor: pointer;
-    }
-
-    .user-info {
-      text-align: center;
-      margin-bottom: 15px;
-    }
-
     .capture-area {
       position: relative;
       width: 100%;
@@ -196,58 +157,6 @@
       vertical-align: middle;
       border: 1px solid #ccc;
     }
-
-    .history-item {
-      margin: 10px 0;
-      padding: 10px;
-      background: rgba(255,255,255,0.05);
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    .history-item:hover {
-      background: rgba(255,255,255,0.1);
-    }
-
-    .history-date {
-      font-size: 0.8em;
-      color: var(--accent);
-    }
-
-    .logout-btn {
-      background: none;
-      border: none;
-      color: var(--accent);
-      text-decoration: underline;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-
-    .tab-container {
-      display: flex;
-      margin-bottom: 15px;
-    }
-
-    .tab {
-      flex: 1;
-      padding: 10px;
-      text-align: center;
-      background: rgba(255,255,255,0.1);
-      cursor: pointer;
-    }
-
-    .tab.active {
-      background: var(--accent);
-      color: black;
-    }
-
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
   </style>
 </head>
 <body class="light">
@@ -255,62 +164,19 @@
     <h1>RAVERSUS Iridology</h1>
     <button class="toggle-mode" onclick="toggleMode()">Toggle Dark/Light Mode</button>
 
-    <!-- Authentication Section -->
-    <div id="authSection" class="auth-section">
-      <div id="loginForm" class="auth-form">
-        <h2>Login</h2>
-        <input type="email" id="loginEmail" placeholder="Email" required>
-        <input type="password" id="loginPassword" placeholder="Password" required>
-        <button onclick="login()">Login</button>
-        <button class="auth-toggle" onclick="showRegister()">Need an account? Register</button>
-      </div>
-
-      <div id="registerForm" class="auth-form" style="display: none;">
-        <h2>Register</h2>
-        <input type="text" id="registerName" placeholder="Name" required>
-        <input type="email" id="registerEmail" placeholder="Email" required>
-        <input type="password" id="registerPassword" placeholder="Password" required>
-        <button onclick="register()">Register</button>
-        <button class="auth-toggle" onclick="showLogin()">Already have an account? Login</button>
-      </div>
+    <div class="capture-area" id="captureArea">
+      <video id="videoElement" autoplay playsinline></video>
+      <canvas id="canvasElement"></canvas>
+      <div class="eye-circle"></div>
+      <div id="instructions">Please allow camera access to begin</div>
     </div>
 
-    <!-- User Info Section (shown when logged in) -->
-    <div id="userInfoSection" class="user-info" style="display: none;">
-      <h2>Welcome, <span id="userName"></span>!</h2>
-      <button class="logout-btn" onclick="logout()">Logout</button>
-    </div>
+    <button class="capture-button" id="captureButton">Start Camera</button>
 
-    <!-- Main App Content (shown when logged in) -->
-    <div id="appContent" style="display: none;">
-      <div class="tab-container">
-        <div class="tab active" onclick="switchTab('analysis')">New Analysis</div>
-        <div class="tab" onclick="switchTab('history')">History</div>
-      </div>
-
-      <!-- Analysis Tab -->
-      <div id="analysisTab" class="tab-content active">
-        <div class="capture-area" id="captureArea">
-          <video id="videoElement" autoplay playsinline></video>
-          <canvas id="canvasElement"></canvas>
-          <div class="eye-circle"></div>
-          <div id="instructions">Please allow camera access to begin</div>
-        </div>
-
-        <button class="capture-button" id="captureButton">Start Camera</button>
-
-        <div class="result-section" id="resultSection">
-          <h2 id="analysisStatus">Analyzing...</h2>
-          <img id="irisPreview" src="" alt="Captured Iris" class="iris-image"/>
-          <div id="analysisResults"></div>
-        </div>
-      </div>
-
-      <!-- History Tab -->
-      <div id="historyTab" class="tab-content">
-        <h2>Your Analysis History</h2>
-        <div id="historyList"></div>
-      </div>
+    <div class="result-section" id="resultSection">
+      <h2 id="analysisStatus">Analyzing...</h2>
+      <img id="irisPreview" src="" alt="Captured Iris" class="iris-image"/>
+      <div id="analysisResults"></div>
     </div>
   </div>
 
@@ -327,172 +193,20 @@
     const analysisResults = document.getElementById('analysisResults');
     const analysisStatus = document.getElementById('analysisStatus');
     const instructions = document.getElementById('instructions');
-    const authSection = document.getElementById('authSection');
-    const userInfoSection = document.getElementById('userInfoSection');
-    const appContent = document.getElementById('appContent');
-    const loginForm = document.getElementById('loginForm');
-    const registerForm = document.getElementById('registerForm');
-    const userNameSpan = document.getElementById('userName');
-    const historyList = document.getElementById('historyList');
 
     // App State
     let isCameraOn = false;
     let stream = null;
     let capturedImage = null;
-    let currentUser = null;
-    let authToken = null;
 
     // Backend API Configuration
-    const API_BASE_URL = 'https://raversus-iridology.onrender.com'; // Replace with your Render.com URL
-    const API_ENDPOINTS = {
-      register: '/api/auth/register',
-      login: '/api/auth/login',
-      analyze: '/api/analysis',
-      history: '/api/history',
-      save: '/api/save'
-    };
+    const API_BASE_URL = 'https://your-render-app-name.onrender.com'; // Replace with your Render.com URL
+    const API_ENDPOINT = '/api/analyze';
 
     // Initialize the app
     document.addEventListener('DOMContentLoaded', () => {
       captureButton.addEventListener('click', handleCaptureButtonClick);
-      checkAuthStatus();
     });
-
-    // Check if user is already authenticated
-    function checkAuthStatus() {
-      const token = localStorage.getItem('authToken');
-      const user = localStorage.getItem('user');
-      
-      if (token && user) {
-        authToken = token;
-        currentUser = JSON.parse(user);
-        showAppContent();
-      }
-    }
-
-    // Show login form
-    function showLogin() {
-      loginForm.style.display = 'block';
-      registerForm.style.display = 'none';
-    }
-
-    // Show register form
-    function showRegister() {
-      loginForm.style.display = 'none';
-      registerForm.style.display = 'block';
-    }
-
-    // Register new user
-    async function register() {
-      const name = document.getElementById('registerName').value;
-      const email = document.getElementById('registerEmail').value;
-      const password = document.getElementById('registerPassword').value;
-
-      try {
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.register}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ name, email, password })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          alert('Registration successful! Please login.');
-          showLogin();
-        } else {
-          throw new Error(data.message || 'Registration failed');
-        }
-      } catch (error) {
-        alert(error.message);
-      }
-    }
-
-    // Login user
-    async function login() {
-      const email = document.getElementById('loginEmail').value;
-      const password = document.getElementById('loginPassword').value;
-
-      try {
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.login}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ email, password })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          authToken = data.token;
-          currentUser = data.user;
-          
-          // Store auth data
-          localStorage.setItem('authToken', authToken);
-          localStorage.setItem('user', JSON.stringify(currentUser));
-          
-          showAppContent();
-        } else {
-          throw new Error(data.message || 'Login failed');
-        }
-      } catch (error) {
-        alert(error.message);
-      }
-    }
-
-    // Logout user
-    function logout() {
-      authToken = null;
-      currentUser = null;
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      
-      // Stop camera if running
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
-      
-      // Reset UI
-      authSection.style.display = 'block';
-      userInfoSection.style.display = 'none';
-      appContent.style.display = 'none';
-      showLogin();
-    }
-
-    // Show main app content after login
-    function showAppContent() {
-      authSection.style.display = 'none';
-      userInfoSection.style.display = 'block';
-      appContent.style.display = 'block';
-      userNameSpan.textContent = currentUser.name;
-      
-      // Load user history
-      loadHistory();
-    }
-
-    // Switch between tabs
-    function switchTab(tabName) {
-      // Update tab styling
-      document.querySelectorAll('.tab').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.remove('active');
-      });
-
-      // Activate selected tab
-      if (tabName === 'analysis') {
-        document.querySelector('.tab:nth-child(1)').classList.add('active');
-        document.getElementById('analysisTab').classList.add('active');
-      } else {
-        document.querySelector('.tab:nth-child(2)').classList.add('active');
-        document.getElementById('historyTab').classList.add('active');
-      }
-    }
 
     // Toggle dark/light mode
     function toggleMode() {
@@ -591,11 +305,8 @@
         const blob = await fetch(imageData).then(r => r.blob());
         formData.append('image', blob, 'iris.jpg');
         
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.analyze}`, {
+        const response = await fetch(`${API_BASE_URL}${API_ENDPOINT}`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          },
           body: formData
         });
         
@@ -604,13 +315,6 @@
         }
         
         const analysisData = await response.json();
-        
-        // Save the analysis to history
-        await saveAnalysis(imageData, {
-          ...analysisData,
-          eyeColor: eyeColor.name,
-          eyeColorRgb: eyeColor.rgb
-        });
         
         // Display results
         displayAnalysisResults({
@@ -626,109 +330,6 @@
         
         analysisStatus.textContent = "Analysis complete (offline mode)";
       }
-    }
-
-    // Save analysis to history
-    async function saveAnalysis(imageData, analysis) {
-      try {
-        await fetch(`${API_BASE_URL}${API_ENDPOINTS.save}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            image: imageData,
-            analysis: analysis,
-            date: new Date().toISOString()
-          })
-        });
-        
-        // Refresh history
-        loadHistory();
-      } catch (err) {
-        console.error("Failed to save analysis:", err);
-      }
-    }
-
-    // Load user's analysis history
-    async function loadHistory() {
-      try {
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.history}`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          }
-        });
-        
-        if (response.ok) {
-          const history = await response.json();
-          displayHistory(history);
-        }
-      } catch (err) {
-        console.error("Failed to load history:", err);
-      }
-    }
-
-    // Display history items
-    function displayHistory(history) {
-      if (!history || history.length === 0) {
-        historyList.innerHTML = "<p>No analysis history yet</p>";
-        return;
-      }
-      
-      let html = '';
-      history.forEach(item => {
-        html += `
-          <div class="history-item" onclick="viewHistoryItem('${item._id}')">
-            <div class="history-date">${new Date(item.date).toLocaleString()}</div>
-            <div>${item.analysis.pattern}</div>
-          </div>
-        `;
-      });
-      
-      historyList.innerHTML = html;
-    }
-
-    // View a specific history item
-    async function viewHistoryItem(id) {
-      try {
-        const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.history}/${id}`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          }
-        });
-        
-        if (response.ok) {
-          const item = await response.json();
-          showHistoryAnalysis(item);
-          switchTab('analysis');
-        }
-      } catch (err) {
-        console.error("Failed to load history item:", err);
-      }
-    }
-
-    // Show a historical analysis
-    function showHistoryAnalysis(item) {
-      capturedImage = item.image;
-      irisPreview.src = item.image;
-      resultSection.style.display = 'block';
-      
-      displayAnalysisResults({
-        eyeColor: {
-          name: item.analysis.eyeColor,
-          rgb: item.analysis.eyeColorRgb
-        },
-        pattern: item.analysis.pattern,
-        insight: item.analysis.insight,
-        confidence: item.analysis.confidence,
-        dietaryTip: item.analysis.dietaryTip,
-        lifestyle: item.analysis.lifestyle
-      });
-      
-      captureButton.textContent = "Retake";
-      videoElement.style.display = 'none';
-      canvasElement.style.display = 'block';
     }
 
     // Get dominant eye color from the image
