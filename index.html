@@ -141,11 +141,27 @@
       text-align: center;
       margin: 10px 0;
     }
+
+    #instructions {
+      text-align: center;
+      padding: 20px;
+      z-index: 1;
+    }
+
+    .eye-color-sample {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      margin-left: 10px;
+      vertical-align: middle;
+      border: 1px solid #ccc;
+    }
   </style>
 </head>
 <body class="light">
   <div class="container">
-    <h1>RAVERSUS</h1>
+    <h1>RAVERSUS Iridology</h1>
     <button class="toggle-mode" onclick="toggleMode()">Toggle Dark/Light Mode</button>
 
     <div class="capture-area" id="captureArea">
@@ -155,7 +171,7 @@
       <div id="instructions">Please allow camera access to begin</div>
     </div>
 
-    <button class="capture-button" id="captureButton" disabled>Start Camera</button>
+    <button class="capture-button" id="captureButton">Start Camera</button>
 
     <div class="result-section" id="resultSection">
       <h2 id="analysisStatus">Analyzing...</h2>
@@ -164,7 +180,7 @@
     </div>
   </div>
 
-  <!-- Load TensorFlow.js and MobileNet model -->
+  <!-- Load TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
   <script>
     // DOM Elements
@@ -180,13 +196,12 @@
 
     // App State
     let isCameraOn = false;
-    let model;
+    let stream = null;
     let capturedImage = null;
 
     // Initialize the app
     document.addEventListener('DOMContentLoaded', () => {
       captureButton.addEventListener('click', handleCaptureButtonClick);
-      loadModel();
     });
 
     // Toggle dark/light mode
@@ -202,7 +217,7 @@
         captureButton.textContent = "Capture Iris";
         isCameraOn = true;
       } else if (!capturedImage) {
-        capturedImage = captureIris();
+        capturedImage = await captureIris();
         captureButton.textContent = "Retake";
         analyzeIris(capturedImage);
       } else {
@@ -218,7 +233,7 @@
     // Start the camera
     async function startCamera() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
             width: { ideal: 1080 },
@@ -229,7 +244,6 @@
         videoElement.srcObject = stream;
         videoElement.style.display = 'block';
         instructions.style.display = 'none';
-        captureButton.disabled = false;
       } catch (err) {
         console.error("Camera error: ", err);
         instructions.textContent = "Camera access denied. Please enable camera permissions.";
@@ -237,40 +251,31 @@
     }
 
     // Capture the iris image
-    function captureIris() {
-      const context = canvasElement.getContext('2d');
-      const size = Math.min(videoElement.videoWidth, videoElement.videoHeight);
-      const x = (videoElement.videoWidth - size) / 2;
-      const y = (videoElement.videoHeight - size) / 2;
-      
-      canvasElement.width = size;
-      canvasElement.height = size;
-      context.drawImage(videoElement, x, y, size, size, 0, 0, size, size);
-      
-      videoElement.style.display = 'none';
-      canvasElement.style.display = 'block';
-      
-      // Convert to circular mask
-      context.globalCompositeOperation = 'destination-in';
-      context.beginPath();
-      context.arc(size/2, size/2, size/2, 0, Math.PI * 2);
-      context.fill();
-      
-      return canvasElement.toDataURL('image/jpeg');
-    }
-
-    // Load the TensorFlow.js model
-    async function loadModel() {
-      try {
-        analysisStatus.innerHTML = "Loading AI model... <span class='loading'></span>";
-        // In a real app, you would load your custom trained iridology model here
-        // For demo purposes, we'll use MobileNet as a placeholder
-        model = await tf.loadGraphModel('https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v3_small_100_224/classification/5/default/1', {fromTFHub: true});
-        console.log("Model loaded successfully");
-      } catch (err) {
-        console.error("Model loading error: ", err);
-        analysisStatus.textContent = "Failed to load AI model";
-      }
+    async function captureIris() {
+      return new Promise((resolve) => {
+        const context = canvasElement.getContext('2d');
+        const size = Math.min(videoElement.videoWidth, videoElement.videoHeight);
+        const x = (videoElement.videoWidth - size) / 2;
+        const y = (videoElement.videoHeight - size) / 2;
+        
+        canvasElement.width = size;
+        canvasElement.height = size;
+        context.drawImage(videoElement, x, y, size, size, 0, 0, size, size);
+        
+        // Apply circular mask
+        context.globalCompositeOperation = 'destination-in';
+        context.beginPath();
+        context.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+        context.fill();
+        context.globalCompositeOperation = 'source-over';
+        
+        videoElement.style.display = 'none';
+        canvasElement.style.display = 'block';
+        
+        // Get image data for analysis
+        const imageData = canvasElement.toDataURL('image/jpeg');
+        resolve(imageData);
+      });
     }
 
     // Analyze the iris image
@@ -281,30 +286,22 @@
       analysisResults.innerHTML = '';
 
       try {
-        // In a production app, you would:
-        // 1. Send the image to your backend API for analysis
-        // 2. Or use a locally loaded TensorFlow.js model
+        // Create an image element to work with
+        const img = new Image();
+        img.src = imageData;
         
-        // For demo purposes, we'll simulate analysis with some sample results
+        await new Promise((resolve) => {
+          img.onload = resolve;
+        });
+        
+        // Get the dominant eye color
+        const eyeColor = await getDominantEyeColor(img);
+        
+        // Generate analysis (in a real app, this would call your AI model)
         setTimeout(() => {
-          displayAnalysisResults(generateSampleResults());
+          displayAnalysisResults(generateAnalysisResults(eyeColor));
         }, 2000);
-
-        // Real implementation would look more like this:
-        /*
-        const imgElement = document.createElement('img');
-        imgElement.src = imageData;
-        await new Promise((resolve) => { imgElement.onload = resolve; });
         
-        const tensor = tf.browser.fromPixels(imgElement)
-          .resizeNearestNeighbor([224, 224])
-          .toFloat()
-          .expandDims();
-        
-        const predictions = await model.predict(tensor).data();
-        const results = interpretPredictions(predictions);
-        displayAnalysisResults(results);
-        */
       } catch (err) {
         console.error("Analysis error: ", err);
         analysisStatus.textContent = "Analysis failed";
@@ -312,23 +309,131 @@
       }
     }
 
-    // Display the analysis results
-    function displayAnalysisResults(results) {
-      analysisStatus.textContent = "Analysis Complete";
+    // Get dominant eye color from the image
+    async function getDominantEyeColor(img) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const size = Math.min(img.width, img.height);
       
-      let html = `
-        <div class="report-item"><strong>Dominant Iris Pattern:</strong> ${results.pattern}</div>
-        <div class="report-item"><strong>Potential Insight:</strong> ${results.insight}</div>
-        <div class="report-item"><strong>Confidence:</strong> ${results.confidence}%</div>
-        <div class="report-item"><strong>Dietary Tip:</strong> ${results.dietaryTip}</div>
-        <div class="report-item"><strong>Lifestyle:</strong> ${results.lifestyle}</div>
-      `;
+      canvas.width = size;
+      canvas.height = size;
       
-      analysisResults.innerHTML = html;
+      // Draw the circular iris image
+      ctx.drawImage(img, 0, 0, size, size);
+      
+      // Get image data from the center region (avoiding pupil and sclera)
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const radius = size * 0.3; // Analyze middle ring of iris
+      
+      const samplePoints = 100;
+      let colorCounts = {};
+      
+      for (let i = 0; i < samplePoints; i++) {
+        const angle = (i / samplePoints) * Math.PI * 2;
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+        
+        const pixel = ctx.getImageData(x, y, 1, 1).data;
+        const color = rgbToColorName(pixel[0], pixel[1], pixel[2]);
+        
+        colorCounts[color] = (colorCounts[color] || 0) + 1;
+      }
+      
+      // Find the most frequent color
+      let dominantColor = 'Unknown';
+      let maxCount = 0;
+      
+      for (const [color, count] of Object.entries(colorCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          dominantColor = color;
+        }
+      }
+      
+      return {
+        name: dominantColor,
+        rgb: getColorRGB(dominantColor)
+      };
     }
 
-    // Generate sample results for demo purposes
-    function generateSampleResults() {
+    // Convert RGB values to color name
+    function rgbToColorName(r, g, b) {
+      // Simple color classification - could be enhanced
+      const hue = getHue(r, g, b);
+      const saturation = getSaturation(r, g, b);
+      const lightness = getLightness(r, g, b);
+      
+      if (lightness < 30) return 'Black';
+      if (lightness > 85) return 'White';
+      if (saturation < 25) return 'Gray';
+      
+      if (hue >= 0 && hue < 30) return 'Brown';
+      if (hue >= 30 && hue < 90) return 'Amber';
+      if (hue >= 90 && hue < 150) return 'Green';
+      if (hue >= 150 && hue < 210) return 'Blue';
+      if (hue >= 210 && hue < 270) return 'Violet';
+      if (hue >= 270 && hue < 330) return 'Hazel';
+      return 'Brown';
+    }
+
+    // Helper functions for color analysis
+    function getHue(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h = 0;
+      
+      if (max === min) {
+        h = 0;
+      } else {
+        const d = max - min;
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+      }
+      
+      return Math.round(h * 360);
+    }
+
+    function getSaturation(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      let s = 0;
+      
+      if (max !== min) {
+        s = l > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min);
+      }
+      
+      return Math.round(s * 100);
+    }
+
+    function getLightness(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      return Math.round(((max + min) / 2) * 100);
+    }
+
+    function getColorRGB(colorName) {
+      const colors = {
+        'Brown': '#964B00',
+        'Blue': '#0000FF',
+        'Green': '#00FF00',
+        'Hazel': '#C8B575',
+        'Amber': '#FFBF00',
+        'Gray': '#808080',
+        'Violet': '#8F00FF',
+        'Black': '#000000',
+        'White': '#FFFFFF'
+      };
+      return colors[colorName] || '#000000';
+    }
+
+    // Generate analysis results including eye color
+    function generateAnalysisResults(eyeColor) {
       const patterns = [
         "Lacuna (Crypts)",
         "Pigmentation Spots",
@@ -364,6 +469,7 @@
       const randomIndex = Math.floor(Math.random() * patterns.length);
       
       return {
+        eyeColor: eyeColor,
         pattern: patterns[randomIndex],
         insight: insights[randomIndex],
         confidence: Math.floor(Math.random() * 30) + 70, // 70-99%
@@ -372,12 +478,30 @@
       };
     }
 
-    // In a real implementation, you would have:
-    // - A proper trained model for iridology
-    // - API integration with your backend
-    // - More sophisticated image processing
-    // - User accounts to save history
-    // - More detailed analysis reports
+    // Display the analysis results
+    function displayAnalysisResults(results) {
+      analysisStatus.textContent = "Analysis Complete";
+      
+      let html = `
+        <div class="report-item"><strong>Eye Color:</strong> ${results.eyeColor.name} 
+          <span class="eye-color-sample" style="background-color: ${results.eyeColor.rgb}"></span>
+        </div>
+        <div class="report-item"><strong>Dominant Iris Pattern:</strong> ${results.pattern}</div>
+        <div class="report-item"><strong>Potential Insight:</strong> ${results.insight}</div>
+        <div class="report-item"><strong>Confidence:</strong> ${results.confidence}%</div>
+        <div class="report-item"><strong>Dietary Tip:</strong> ${results.dietaryTip}</div>
+        <div class="report-item"><strong>Lifestyle:</strong> ${results.lifestyle}</div>
+      `;
+      
+      analysisResults.innerHTML = html;
+    }
+
+    // Clean up camera stream when leaving page
+    window.addEventListener('beforeunload', () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    });
   </script>
 </body>
 </html>
