@@ -14,10 +14,19 @@
       --text-dark: #333333;
     }
 
-    body.dark { background-color: var(--bg-dark); color: var(--text-light); }
-    body.light { background-color: var(--bg-light); color: var(--text-dark); }
+    body.dark {
+      background-color: var(--bg-dark);
+      color: var(--text-light);
+    }
+
+    body.light {
+      background-color: var(--bg-light);
+      color: var(--text-dark);
+    }
+
     body {
-      margin: 0; font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
       transition: background-color 0.3s, color 0.3s;
     }
 
@@ -46,7 +55,7 @@
       overflow: hidden;
     }
 
-    #videoElement, #canvasElement {
+    #videoElement {
       position: absolute;
       width: 100%;
       height: 100%;
@@ -54,8 +63,16 @@
       display: none;
     }
 
+    #canvasElement {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+
     .eye-circle {
-      width: 80%; height: 80%;
+      width: 80%;
+      height: 80%;
       border: 2px solid white;
       border-radius: 50%;
       position: relative;
@@ -105,20 +122,26 @@
       animation: spin 1s ease-in-out infinite;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
 
-    .report-item {
+    .error-message {
+      color: #ff6b6b;
+      text-align: center;
       margin: 10px 0;
     }
 
-    .eye-color-sample {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      margin-left: 10px;
-      vertical-align: middle;
-      border: 1px solid #ccc;
+    #instructions {
+      text-align: center;
+      padding: 20px;
+      z-index: 1;
+    }
+
+    .iris-image {
+      width: 100%;
+      border-radius: 10px;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -156,6 +179,8 @@
     let isCameraOn = false;
     let stream = null;
     let capturedImage = null;
+
+    const API_BASE_URL = ''; // Leave empty for same domain
     const API_ENDPOINT = '/api/analyze';
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -187,13 +212,20 @@
 
     async function startCamera() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'user',
+            width: { ideal: 1080 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
         videoElement.srcObject = stream;
         videoElement.style.display = 'block';
         instructions.style.display = 'none';
       } catch (err) {
         console.error("Camera error: ", err);
-        instructions.textContent = "Camera access denied.";
+        instructions.textContent = "Camera access denied. Please enable permissions.";
       }
     }
 
@@ -207,6 +239,8 @@
         canvasElement.width = size;
         canvasElement.height = size;
         context.drawImage(videoElement, x, y, size, size, 0, 0, size, size);
+
+        // Circular mask
         context.globalCompositeOperation = 'destination-in';
         context.beginPath();
         context.arc(size/2, size/2, size/2, 0, Math.PI * 2);
@@ -228,41 +262,30 @@
       analysisResults.innerHTML = '';
 
       try {
-        const formData = new FormData();
         const blob = await fetch(imageData).then(r => r.blob());
+        const formData = new FormData();
         formData.append('image', blob, 'iris.jpg');
 
-        const response = await fetch(API_ENDPOINT, {
+        const response = await fetch(`${API_BASE_URL}${API_ENDPOINT}`, {
           method: 'POST',
           body: formData
         });
 
-        if (!response.ok) {
-          throw new Error('API error');
-        }
+        if (!response.ok) throw new Error('Analysis failed');
 
         const data = await response.json();
-
         analysisStatus.textContent = "Analysis Complete";
-        analysisResults.innerHTML = `
-          <div class="report-item"><strong>Pattern:</strong> ${data.pattern}</div>
-          <div class="report-item"><strong>Insight:</strong> ${data.insight}</div>
-          <div class="report-item"><strong>Confidence:</strong> ${data.confidence}%</div>
-          <div class="report-item"><strong>Dietary Tip:</strong> ${data.dietaryTip}</div>
-          <div class="report-item"><strong>Lifestyle:</strong> ${data.lifestyle}</div>
-          <div class="report-item"><strong>Additional Insights:</strong> ${data.additionalInsights}</div>
-          <div class="report-item"><strong>Recommendations:</strong> ${data.recommendations}</div>
-        `;
+        analysisResults.innerHTML = `<div>${data.analysis.replace(/\n/g, '<br>')}</div>`;
+
       } catch (err) {
-        console.error(err);
-        analysisStatus.textContent = "Analysis failed. Please try again.";
+        console.error('❌ Analysis error:', err);
+        analysisStatus.textContent = "Analysis failed. Try again.";
+        analysisResults.innerHTML = `<p class="error-message">Could not analyze the iris.</p>`;
       }
     }
 
     window.addEventListener('beforeunload', () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      if (stream) stream.getTracks().forEach(track => track.stop());
     });
   </script>
 </body>
